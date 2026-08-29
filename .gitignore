@@ -1,0 +1,46 @@
+# --- macOS ---
+.DS_Store
+
+# --- Xcode / build output ---
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# --- Xcode per-user state ---
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+
+# --- Generated project (source of truth is NDICam/project.yml + xcodegen) ---
+NDICam/NDICam.xcodeproj/
+
+# --- Swift Package Manager ---
+.build/
+.swiftpm/
+
+# --- CocoaPods / Carthage (not used, kept for safety) ---
+Pods/
+Carthage/Build/
+
+# --- NDI SDK: licensed, ~256 MB, NOT redistributable. Each dev installs it
+#     and symlinks it here (see README). ---
+vendor/
+
+# --- Misc ---
+*.log
+fastlane/report.xml
+fastlane/screenshots/**/*.png

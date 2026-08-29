@@ -1,0 +1,49 @@
+name: NDICam
+options:
+  bundleIdPrefix: com.fiqri
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  NDICam:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fiqri.ndicam
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/NDI/NDICam-Bridging-Header.h
+        # NDI SDK for Apple (regular / full-bandwidth SDK), symlinked at vendor/NDI-SDK-Apple.
+        # Headers are cross-platform; the static lib + real code path are device-only
+        # (the iOS lib has no arm64-simulator slice), so the simulator keeps the stub.
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../vendor/NDI-SDK-Apple/include
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]": $(SRCROOT)/../vendor/NDI-SDK-Apple/lib/iOS
+        "OTHER_LDFLAGS[sdk=iphoneos*]": -lndi_ios
+        "GCC_PREPROCESSOR_DEFINITIONS[sdk=iphoneos*]": $(inherited) NDICAM_HAVE_NDI=1
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos*]": $(inherited) NDI_SDK_AVAILABLE
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        CFBundleDisplayName: NDICam
+        UILaunchScreen: {}
+        UIStatusBarHidden: true
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSCameraUsageDescription: "NDICam needs the camera to broadcast video over NDI."
+        NSLocalNetworkUsageDescription: "NDICam publishes an NDI video source on your local network."
+        NSBonjourServices:
+          - _ndi._tcp
+          - _ndi._udp
