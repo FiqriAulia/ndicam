@@ -15,6 +15,8 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     var onStatus: ((Status) -> Void)?
     /// Actual capture parameters after format selection (may differ from requested).
     var onActiveFormat: ((_ width: Int32, _ height: Int32, _ fps: Int32) -> Void)?
+    /// Device-reported control limits for the active format.
+    var onControlRanges: ((CameraControlRanges) -> Void)?
 
     private let queue = DispatchQueue(label: "ndicam.session")
     private let videoQueue = DispatchQueue(label: "ndicam.video", qos: .userInitiated)
@@ -23,6 +25,9 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     private var position: AVCaptureDevice.Position = .back
     private var config = CaptureConfig(width: 1280, height: 720, fps: 30, sourceName: "NDICam")
     private weak var currentSender: NDISender?
+    private var currentDevice: AVCaptureDevice?
+    private var desiredControls = CameraControlState()
+    private var _ranges = CameraControlRanges()
 
     // MARK: - Public API
 
@@ -136,8 +141,17 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
         session.commitConfiguration()
         if !session.isRunning { session.startRunning() }
+
+        currentDevice = device
+        _ranges = Self.ranges(for: device.activeFormat)
+        applyControlsLocked()   // activeFormat change resets exposure/WB — re-assert
+
         emit(.running)
-        DispatchQueue.main.async { self.onActiveFormat?(active.width, active.height, active.fps) }
+        let ranges = _ranges
+        DispatchQueue.main.async {
+            self.onActiveFormat?(active.width, active.height, active.fps)
+            self.onControlRanges?(ranges)
+        }
     }
 
     /// Picks the `AVCaptureDevice.Format` closest to the requested resolution that
@@ -204,7 +218,72 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
     var connectionCount: Int { currentSender?.connectionCount ?? 0 }
 
+    // MARK: - Manual camera controls
+
+    private static func ranges(for format: AVCaptureDevice.Format) -> CameraControlRanges {
+        var r = CameraControlRanges()
+        r.minISO = format.minISO
+        r.maxISO = format.maxISO
+        let longest = CMTimeGetSeconds(format.maxExposureDuration)   // e.g. ~1s
+        let shortest = CMTimeGetSeconds(format.minExposureDuration)  // e.g. ~1/8000
+        if longest > 0 { r.minShutterDenominator = max(1, Int((1.0 / longest).rounded())) }
+        if shortest > 0 { r.maxShutterDenominator = Int((1.0 / shortest).rounded()) }
+        return r
+    }
+
+    private func applyControlsLocked() {
+        guard let d = currentDevice else { return }
+        do {
+            try d.lockForConfiguration()
+            defer { d.unlockForConfiguration() }
+
+            // Exposure
+            if desiredControls.autoExposure {
+                if d.isExposureModeSupported(.continuousAutoExposure) {
+                    d.exposureMode = .continuousAutoExposure
+                }
+            } else if d.isExposureModeSupported(.custom) {
+                let fmt = d.activeFormat
+                let iso = min(max(desiredControls.iso, fmt.minISO), fmt.maxISO)
+                var dur = CMTime(value: 1, timescale: CMTimeScale(max(1, desiredControls.shutterDenominator)))
+                if CMTimeCompare(dur, fmt.minExposureDuration) < 0 { dur = fmt.minExposureDuration }
+                if CMTimeCompare(dur, fmt.maxExposureDuration) > 0 { dur = fmt.maxExposureDuration }
+                d.setExposureModeCustom(duration: dur, iso: iso, completionHandler: nil)
+            }
+
+            // White balance
+            if desiredControls.autoWhiteBalance {
+                if d.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    d.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+            } else if d.isWhiteBalanceModeSupported(.locked) {
+                let tt = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                    temperature: desiredControls.temperature, tint: desiredControls.tint)
+                var g = d.deviceWhiteBalanceGains(for: tt)
+                let maxG = d.maxWhiteBalanceGain
+                g.redGain = min(max(g.redGain, 1.0), maxG)
+                g.greenGain = min(max(g.greenGain, 1.0), maxG)
+                g.blueGain = min(max(g.blueGain, 1.0), maxG)
+                d.setWhiteBalanceModeLocked(with: g, completionHandler: nil)
+            }
+        } catch {
+            emit(.failed("Camera control: \(error.localizedDescription)"))
+        }
+    }
+
     private func emit(_ status: Status) {
         DispatchQueue.main.async { self.onStatus?(status) }
+    }
+}
+
+extension CaptureEngine: CameraControlling {
+    func applyCameraControls(_ state: CameraControlState) {
+        queue.async {
+            self.desiredControls = state
+            self.applyControlsLocked()
+        }
+    }
+    var cameraControlRanges: CameraControlRanges {
+        queue.sync { _ranges }
     }
 }

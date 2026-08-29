@@ -4,6 +4,7 @@ struct ContentView: View {
     @StateObject private var camera: CameraCaptureController
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
+    @State private var showControls = false
 
     init(controller: CameraCaptureController) {
         _camera = StateObject(wrappedValue: controller)
@@ -45,7 +46,12 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            SettingsView().presentationDetents([.medium, .large])
+            SettingsView(remoteControlURL: camera.remoteControlURL)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showControls) {
+            CameraControlsView(ranges: camera.controlRanges)
+                .presentationDetents([.medium, .large])
         }
         .statusBarHidden()
     }
@@ -79,14 +85,15 @@ struct ContentView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 36) {
+        HStack(spacing: 22) {
+            circleButton("camera.aperture") { showControls = true }
             circleButton("gearshape") { showSettings = true }
             Button {
                 camera.toggleBroadcast()
             } label: {
                 Text(camera.isBroadcasting ? "Stop NDI" : "Start NDI")
                     .font(.headline)
-                    .frame(width: 140, height: 56)
+                    .frame(width: 132, height: 56)
                     .background(camera.isBroadcasting ? .red : .green, in: Capsule())
                     .foregroundStyle(.white)
             }

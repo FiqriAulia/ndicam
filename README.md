@@ -21,6 +21,10 @@ on the desktop. A software replacement for a capture card, over WiFi.
   no colour-space conversion on the app side; zero-copy when the pixel-buffer
   planes are contiguous.
 - **Configurable** — 720p / 1080p, 30 / 60 fps, editable source name (persisted).
+- **Manual camera controls** — ISO, shutter, and white balance (temperature /
+  tint), each with an auto/lock switch; slider bounds come from the device.
+- **Optional web remote** — off by default; when enabled, NDICam serves a small
+  self-contained control page you can add as an OBS custom browser dock.
 - **Live status** — LIVE badge, connected-receiver count, active
   resolution/frame-rate, and a thermal warning when the device runs hot.
 - **Resilient capture** — auto-recovers from interruptions (incoming call,
@@ -120,6 +124,8 @@ NDI HX; there is no H.264/HEVC encoding.
 | `NDICam/Sources/Capture/CameraPreviewView.swift` | `AVCaptureVideoPreviewLayer` wrapper |
 | `NDICam/Sources/NDI/NDISender.swift` | Swift handle; stub or real per `NDI_SDK_AVAILABLE` |
 | `NDICam/Sources/NDI/NDISenderBridge.{h,mm}` | Obj-C++ wrapper over `NDIlib_send_*`; NV12 send (contiguous zero-copy or staged), BGRA fallback, receiver count |
+| `NDICam/Sources/Capture/CameraControls.swift` | `CameraControlling` protocol + value types — the one control surface every driver (on-device UI, web remote, future NDI metadata) talks to |
+| `NDICam/Sources/Remote/` | opt-in `NWListener` HTTP server + the self-contained control page it serves |
 
 ## Licensing
 
@@ -134,9 +140,8 @@ release. Not relevant for personal sideloading.
 
 ## Backlog
 
-- Remote control from the desktop (start/stop, camera, resolution) — an in-app
-  HTTP control panel, or the NDI metadata channel (`NDIlib_send_capture`) for
-  PTZ-style control from NDI Studio Monitor
+- Manual controls **pro** tier: focus (manual + tap), zoom, lens pick,
+  stabilization, EV bias, colour space; overlays (grid, focus peaking, zebra)
+- Web remote: expose resolution/fps + broadcast state, tidy the dock page
 - NDI HX (compressed) sender path for constrained WiFi
 - Metal / vImage scaler (only if a non-native capture resolution is ever needed)
-- Tap-to-focus / exposure lock

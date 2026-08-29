@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: BroadcastSettings
     @Environment(\.dismiss) private var dismiss
+    var remoteControlURL: String?
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,27 @@ struct SettingsView: View {
                     }
                     Text("1080p60 is the highest quality but uses the most WiFi bandwidth (full-bandwidth NDI, ~130 Mbps). Drop to 720p30 if the stream stutters.")
                         .font(.footnote).foregroundStyle(.secondary)
+                }
+
+                Section("Remote control") {
+                    Toggle("Web control panel", isOn: Binding(
+                        get: { settings.remoteControlEnabled },
+                        set: { settings.remoteControlEnabled = $0 }
+                    ))
+                    if settings.remoteControlEnabled {
+                        if let url = remoteControlURL {
+                            LabeledContent("Open in a browser") {
+                                Text(url).textSelection(.enabled).foregroundStyle(.tint)
+                            }
+                            Text("Add this URL as an OBS custom browser dock to control the camera from your desktop. Same WiFi only.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        } else {
+                            Text("Starting server…").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text("Off by default. When on, NDICam serves a small control page on your local network — nothing runs otherwise.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Settings")

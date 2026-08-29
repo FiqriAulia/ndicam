@@ -31,6 +31,8 @@ final class CameraCaptureController: ObservableObject {
     @Published private(set) var activeFormat: String = "—"
     @Published private(set) var connectionCount = 0
     @Published private(set) var thermalState = ProcessInfo.processInfo.thermalState
+    @Published private(set) var controlRanges = CameraControlRanges()
+    @Published private(set) var remoteControlURL: String?
 
     let settings: BroadcastSettings
     private let engine = CaptureEngine()
@@ -38,6 +40,7 @@ final class CameraCaptureController: ObservableObject {
     private var pollTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var activeFps: Int32 = 30
+    private var remoteServer: RemoteControlServer?
 
     var session: AVCaptureSession { engine.session }
 
@@ -55,13 +58,19 @@ final class CameraCaptureController: ObservableObject {
                 self.sender?.setFrameRate(fps: fps)
             }
         }
+        engine.onControlRanges = { [weak self] ranges in
+            MainActor.assumeIsolated { self?.controlRanges = ranges }
+        }
 
-        // Re-apply capture config whenever settings change.
+        // Re-apply capture config + camera controls whenever settings change.
         settings.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] in
                 guard let self else { return }
                 self.engine.apply(config: self.settings.snapshot)
+                self.engine.applyCameraControls(self.settings.controlState)
+                self.remoteServer?.update(self.settings.controlState)
+                self.syncRemoteServer()
             }
             .store(in: &cancellables)
 
@@ -73,14 +82,46 @@ final class CameraCaptureController: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func start() { engine.start(config: settings.snapshot) }
+    func start() {
+        engine.start(config: settings.snapshot)
+        engine.applyCameraControls(settings.controlState)
+        syncRemoteServer()
+    }
 
+    /// Called when the app backgrounds. The remote-control server is intentionally
+    /// left alive — iOS freezes it with the app and it resumes on foreground, which
+    /// avoids rebinding the listener port on every app switch.
     func stop() {
         stopBroadcast()
         engine.stop()
     }
 
     func switchCamera() { engine.switchCamera() }
+
+    // MARK: - Web remote control (opt-in)
+
+    private func syncRemoteServer() {
+        if settings.remoteControlEnabled {
+            guard remoteServer == nil else { return }
+            let server = RemoteControlServer(
+                controls: engine,
+                initial: settings.controlState,
+                onApply: { [weak self] newState in
+                    Task { @MainActor in self?.settings.apply(newState) }
+                },
+                onToggleBroadcast: { [weak self] in Task { @MainActor in self?.toggleBroadcast() } },
+                onSwitchCamera: { [weak self] in Task { @MainActor in self?.switchCamera() } }
+            )
+            server.start { [weak self] url in
+                Task { @MainActor in self?.remoteControlURL = url }
+            }
+            remoteServer = server
+        } else if remoteServer != nil {
+            remoteServer?.stop()
+            remoteServer = nil
+            remoteControlURL = nil
+        }
+    }
 
     func toggleBroadcast() {
         isBroadcasting ? stopBroadcast() : startBroadcast()
