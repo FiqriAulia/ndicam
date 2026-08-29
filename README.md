@@ -29,9 +29,14 @@ on the desktop. A software replacement for a capture card, over WiFi.
 
 ## Screens
 
-| Preview + controls | Settings |
-|---|---|
-| _add screenshot_ | _add screenshot_ |
+<div align="center">
+<img src="docs/live.png" alt="Broadcasting" width="260">
+&nbsp;&nbsp;
+<img src="docs/settings.png" alt="Settings" width="260">
+</div>
+
+Live view shows the LIVE badge, connected-receiver count, and the active
+resolution / frame rate; Settings picks resolution, frame rate, and source name.
 
 ## Requirements
 
